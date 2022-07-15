@@ -1,4 +1,7 @@
+from typing import Union, Literal
 from .constants import required
+
+Side = Union[Literal['top', 'bottom', 'left', 'right']]
 
 
 def isinstance_permissive(obj, cls):

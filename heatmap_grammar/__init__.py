@@ -1,4 +1,5 @@
 from .annotations import Annotation, ColumnAnnotation, RowAnnotation
+from .dendrograms import ColumnDendrogram, RowDendrogram
 from .clustering import clustering_distance, inverse_abs_correlation
 from .heatmap import Heatmap, HeatmapTheme
 from .guides import guide_colorbar, guide_colourbar, guide_legend
@@ -13,6 +14,9 @@ from .scales import (
     scale_color_gradient_n, scale_fill_gradient_n,
     scale_color_manual, scale_fill_manual,
 )
+from .unit import Unit
+
+unit = Unit
 
 __version__ = '0.0.1'
 
@@ -20,6 +24,8 @@ __all__ = [
     'Plot',
     'Heatmap',
     'HeatmapTheme',
+    'ColumnDendrogram',
+    'RowDendrogram',
     'Annotation',
     'ColumnAnnotation',
     'RowAnnotation',
@@ -39,4 +45,5 @@ __all__ = [
     'scale_color_gradient2', 'scale_fill_gradient2',
     'scale_color_gradient_n', 'scale_fill_gradient_n',
     'scale_color_manual', 'scale_fill_manual',
+    'unit'
 ]

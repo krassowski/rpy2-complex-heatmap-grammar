@@ -2,7 +2,7 @@ from __future__ import annotations
 from copy import copy
 from dataclasses import dataclass, field
 from typing import (
-    Any, Callable, Literal,
+    Any, Callable,
     Optional, Union, Iterable
 )
 
@@ -12,6 +12,7 @@ from rpy2.rinterface import NULL
 
 from .annotations import ColumnAnnotation
 from .constants import unset
+from .dendrograms import Dendrogram, RowDendrogram, ColumnDendrogram
 from .plot import Plot, PlotComponent, Theme
 from .rpy2_helpers import py2rpy
 from .r import (
@@ -20,17 +21,15 @@ from .r import (
     grid
 )
 from .scales import Scale, scale_fill_gradient_n
-from .utils import isinstance_permissive
+from .utils import Side, isinstance_permissive
 from .guides import guide_colorbar
-
-
-SIDE = Union[Literal['top', 'bottom', 'left', 'right']]
+from .unit import Unit
 
 
 @dataclass
 class HeatmapTheme(Theme):
-    heatmap_legend_side: SIDE = 'left'
-    annotation_legend_side: SIDE = 'left'
+    heatmap_legend_side: Side = 'left'
+    annotation_legend_side: Side = 'left'
     annotation_legend_list: list = field(default_factory=list)
     merge_legend: bool = True
     main_heatmap: str = unset
@@ -49,6 +48,13 @@ def default_heatmap_scales():
     }
 
 
+def default_dendrograms():
+    return {
+        'row': RowDendrogram(),
+        'column': ColumnDendrogram()
+    }
+
+
 def new_heatmap_id(i=[0]):
     i[0] += 1
     return f'heatmap{i[0]}'
@@ -60,24 +66,26 @@ class Heatmap(PlotComponent):
     weight: Optional[Callable[[DataFrame], Series]] = None
     border: bool | str = False
     top_annotation: 'ColumnAnnotation' | None = None
-    column_dend_height: float = grid.unit(1, "cm")   # TODO unit
+    height: Unit | None = None
+    width: Unit | None = None
+    row_gap: Unit | None = Unit(0.5, 'mm')
+    column_gap: Unit | None = Unit(0.5, 'mm')
     title: str = ''
     name: str = field(default_factory=new_heatmap_id)
     cluster_rows: bool = True
     cluster_columns: bool = True
-    show_row_dend: bool = True
     show_row_names: bool = True
     show_column_names: bool = True
     clustering_distance_columns: str = "euclidean"
     clustering_method_columns: str = "complete"
     clustering_distance_rows: str = "euclidean"
     clustering_method_rows: str = "complete"
-    row_dend_side: str = 'left'
     row_names: Any = grid.gpar(fontsize=8)
     column_title: Any = grid.gpar()
     column_labels: Iterable | dict | None = None
     row_labels: Iterable | dict | None = None
     scales: dict[str, Scale] = field(default_factory=default_heatmap_scales, init=False)
+    dendrograms: dict[str, Dendrogram] = field(default_factory=default_dendrograms, init=False)
     manage_heatmap_legend: bool = True
 
     def __post_init__(self):
@@ -119,12 +127,24 @@ class Heatmap(PlotComponent):
             if value is not None:
                 kwargs[argument] = value
 
-        if_not_none_self = ['row_labels', 'column_labels']
+        for dendrogram in self.dendrograms.values():
+            kwargs.update(dendrogram.params())
+
+        if_not_none_self = [
+            'row_labels', 'column_labels',
+            'height', 'width',
+            'row_gap', 'column_gap',
+        ]
 
         for argument in if_not_none_self:
             value = getattr(self, argument)
             if value is not None:
                 kwargs[argument] = value
+
+        for key, value in kwargs.items():
+            # convert Unit and others as needed
+            if hasattr(value, 'to_r'):
+                kwargs[key] = value.to_r()
 
         map_axes = {
             'row_labels': 'index',
@@ -160,25 +180,26 @@ class Heatmap(PlotComponent):
             if key in kwargs and isinstance_permissive(kwargs[key], Series):
                 kwargs[key] = base.c(*kwargs[key])
 
+        kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if v is not unset
+        }
+
         return complex_heatmap.Heatmap(
             py2rpy(data),
             *args,
             name=self.name,
             border=self.border,
             na_col=fill_scale.na_value,
-            row_gap=grid.unit(0.5, "mm"),
-            column_gap=grid.unit(0.5, "mm"),
-            column_dend_height=self.column_dend_height,
             cluster_rows=self.cluster_rows,
             cluster_columns=self.cluster_columns,
-            show_row_dend=self.show_row_dend,
             show_row_names=self.show_row_names,
             show_column_names=self.show_column_names,
             clustering_distance_columns=self.clustering_distance_columns,
             clustering_method_columns=self.clustering_method_columns,
             clustering_distance_rows=self.clustering_distance_rows,
             clustering_method_rows=self.clustering_method_rows,
-            row_dend_side=self.row_dend_side,
             row_names_gp=self.row_names,
             column_title_gp=self.column_title,
             show_heatmap_legend=False if self.manage_heatmap_legend else True,
@@ -210,15 +231,23 @@ class Heatmap(PlotComponent):
         return self.heatmap(
             plot,
             molecule_abundance,
-            show_column_dend=True,
             column_title=self.title,
             row_title=NULL,
             heatmap_legend_param=base.list(**fill_scale.params)
         )
 
+    def decorate(self, ht_list):
+        for dendrogram in self.dendrograms.values():
+            dendrogram.apply_decoration(ht_list, self.name)
+
     def __add__(self, other):
         result = copy(self)
         result.scales = copy(result.scales)
-        assert isinstance_permissive(other, Scale)
-        result.scales[other.aesthetic] = other
+        if isinstance_permissive(other, Scale):
+            result.scales[other.aesthetic] = other
+        elif isinstance_permissive(other, Dendrogram):
+            result.dendrograms[other.axis] = other
         return result
+
+    def _repr_html_(self):
+        return (Plot() + self)._repr_html_()

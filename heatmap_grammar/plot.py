@@ -8,10 +8,10 @@ from warnings import warn
 
 from pandas import DataFrame, Series, concat
 from rpy2.robjects.packages import importr
+from rpy2.rinterface import rternalize
 
 from .constants import unset
 from .r import complex_heatmap, base
-from .scales import Scale
 from .utils import isinstance_permissive
 
 _add = base._env['+']
@@ -53,7 +53,7 @@ class Plot:
 
         if isinstance_permissive(other, Theme):
             result.theme.update(other.__dict__)
-        elif isinstance_permissive(other, Scale):
+        elif not isinstance_permissive(other, PlotComponent):
             result.components[-1] += other
         else:
             if (
@@ -117,7 +117,7 @@ class Plot:
                     if legend not in legends:
                         legends.append(legend)
 
-        return complex_heatmap.draw(
+        ht_list = complex_heatmap.draw(
             plot,
             **{
                 k: v
@@ -125,6 +125,15 @@ class Plot:
                 if v is not unset
             }
         )
+
+        self.decorate(ht_list)
+
+        return ht_list
+
+    def decorate(self, ht_list):
+        for component in self.components:
+            if hasattr(component, 'decorate'):
+                component.decorate(ht_list)
 
     def interact(self):
         interactive_complex_heatmap = importr('InteractiveComplexHeatmap')
@@ -141,10 +150,15 @@ class Plot:
 
             args = ' '.join([f'--{k} {v}' for k, v in self._size.items()])
 
+            @rternalize
+            def decorate():
+                self.decorate(plot)
+                return plot
+
             RMagics(get_ipython()).R(
-                line=f'-i plot {args}',
-                cell='plot',
-                local_ns={'plot': plot}
+                line=f'-i plot -i decorate {args}',
+                cell='print(plot)\nsink = decorate()',
+                local_ns={'plot': plot, 'decorate': decorate}
             )
         except Exception as e:
             warn(
@@ -196,7 +210,11 @@ class VerticalGroup(PlotComponent):
             c.create(*args, **kwargs)
             for c in self.members
         ]
-        return reduce(_vertical_concatenate, component_plots[1:], component_plots[0])
+        return reduce(
+            _vertical_concatenate,
+            component_plots[1:],
+            component_plots[0]
+        )
 
     @property
     def rows(self) -> Series:

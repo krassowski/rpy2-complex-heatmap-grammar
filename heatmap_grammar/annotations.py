@@ -2,14 +2,14 @@ from __future__ import annotations
 from copy import copy
 from dataclasses import dataclass, field
 from typing import (
-    Any, Callable, Literal,
+    Callable, Literal,
     Optional, Union, List
 )
 
 
 from pandas import DataFrame, Series
-from rpy2.rinterface import NULL
 
+from .constants import unset
 from .r import (
     complex_heatmap,
     base,
@@ -18,6 +18,7 @@ from .r import (
 from .markdown import GridTextData
 from .plot import Plot, PlotComponent
 from .scales import Scale, scale_fill_gradient, scale_identity
+from .unit import Unit
 from .utils import isinstance_permissive
 
 ComplexHeatmapGeom = Literal[
@@ -42,8 +43,8 @@ class Annotation:
     data: DataFrame | None = None
     mapping: Optional[dict] = None
     label: Optional[str] = None
-    height: Any = NULL  # expects grid.unit()
-    width: Any = NULL  # expects grid.unit()
+    height: Unit | None = None
+    width: Unit | None = None
     label_rotation: Literal[0, 90, 180, 270] = 0
     label_side: Literal['right', 'left', 'top', 'bottom', 'auto'] = 'auto'
     label_size: float = 5
@@ -79,11 +80,13 @@ class Annotation:
         value = mapped_dataset.extract('value')
 
         if self.geom == 'mark':
-            # TODO: rewrite
-            indexed_numerically = value.reset_index(drop=True)
-            value = Series(
-                list(indexed_numerically.where(indexed_numerically).dropna().index),
-                index=list(value.index.to_series().where(value).dropna())
+            value = (
+                value
+                .to_frame('value')
+                .assign(number=range(1, len(value) + 1))
+                .where(value)
+                .dropna()
+                ['number']
             )
 
         gp_mapping = self.gp_arguments.copy()
@@ -132,10 +135,10 @@ class Annotation:
         if gp_mapping:
             graphical_params['gp'] = grid.gpar(**gp_mapping)
 
-        if annotation_group.which == 'column' and self.height != NULL:
-            graphical_params['height'] = self.height
-        if annotation_group.which == 'row' and self.width != NULL:
-            graphical_params['width'] = self.width
+        if annotation_group.which == 'column' and self.height is not None:
+            graphical_params['height'] = self.height.to_r()
+        if annotation_group.which == 'row' and self.width is not None:
+            graphical_params['width'] = self.width.to_r()
 
         return geom(
             # note: to_list() converts to native type such as float instead of np.float64
@@ -166,7 +169,7 @@ class AnnotationGroup(PlotComponent):
     layers: list[Annotation] = field(default_factory=list)
     default_label_side: str = 'abstract'   # TODO
     which: str = 'abstract'
-    gap: Any = NULL  # expects grid.unit()
+    gap: Unit | None = None
     allow_missing: bool = False
 
     @property
@@ -224,6 +227,10 @@ class AnnotationGroup(PlotComponent):
             str(layer.name): layer.create(self)
             for layer in self.layers
         }
+        kwargs = {}
+        if self.gap is not None:
+            kwargs['gap'] = self.gap.to_r()
+
         return self.constructor(
             **annotations,
             annotation_name_gp=grid.gpar(fontsize=base.c(*[
@@ -249,7 +256,7 @@ class AnnotationGroup(PlotComponent):
                 str(layer.name): layer.name_object
                 for layer in self.layers
             }),
-            gap=self.gap
+            **kwargs
             #annotation_legend_param=self.legends
         )
 
@@ -273,6 +280,11 @@ class AnnotationGroup(PlotComponent):
                 result.layers.append(annotation)
         return result
 
+    def check_no_none(self, kwargs):
+        for k, v in kwargs.items():
+            if v is None or v is unset:
+                raise ValueError(f'{k} is None or unset in R call')
+
 
 @dataclass
 class ColumnAnnotation(AnnotationGroup):
@@ -280,6 +292,7 @@ class ColumnAnnotation(AnnotationGroup):
     default_label_side: str = 'right'
 
     def constructor(self, *args, **kwargs):
+        self.check_no_none(kwargs)
         return complex_heatmap.columnAnnotation(*args, **kwargs)
 
 
@@ -289,4 +302,5 @@ class RowAnnotation(AnnotationGroup):
     default_label_side: str = 'top'
 
     def constructor(self, *args, **kwargs):
+        self.check_no_none(kwargs)
         return complex_heatmap.rowAnnotation(*args, **kwargs)
