@@ -11,6 +11,7 @@ from rpy2.robjects.packages import importr
 from rpy2.rinterface import rternalize
 
 from .constants import unset
+from .markdown import MarkdownData
 from .r import complex_heatmap, base
 from .utils import isinstance_permissive
 
@@ -63,11 +64,11 @@ class Plot:
             ):
                 split = other.extract_values('split')
                 name = f'{other.which}_split'
-                existing = hasattr(self, name)
+                existing = getattr(result, name)
                 if existing is not None:
                     assert all(existing == split)
-                setattr(self, name, split)
-            other.attach(self)
+                setattr(result, name, base.c(*split))
+            other.attach(result)
             result.components.append(other)
         result._check_data_integrity()
         return result
@@ -117,10 +118,19 @@ class Plot:
                     if legend not in legends:
                         legends.append(legend)
 
+        for key in ['row_split', 'column_split']:
+            value = getattr(self, key)
+            if value is not None:
+                theme[key] = value
+
         ht_list = complex_heatmap.draw(
             plot,
             **{
-                k: v
+                k: (
+                    v.wrapper
+                    if isinstance_permissive(v, MarkdownData) else
+                    v
+                )
                 for k, v in theme.items()
                 if v is not unset
             }
@@ -231,3 +241,8 @@ class VerticalGroup(PlotComponent):
 @dataclass
 class Theme:
     pass
+
+
+@dataclass
+class labs(Theme):
+    column_title: str | MarkdownData = unset

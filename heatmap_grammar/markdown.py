@@ -4,7 +4,7 @@ from .r import complex_heatmap
 
 
 @dataclass
-class GridTextData:
+class MarkdownData:
     text: str
     wrapper: Any
 
@@ -12,8 +12,8 @@ class GridTextData:
         return self.text
 
 
-def markdown(text: str) -> GridTextData:
-    return GridTextData(
+def markdown(text: str) -> MarkdownData:
+    return MarkdownData(
         text=text,
         wrapper=complex_heatmap.gt_render(text)
     )

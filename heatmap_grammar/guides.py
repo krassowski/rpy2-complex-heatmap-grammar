@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Union
 from rpy2.rinterface import NULL
@@ -9,10 +10,10 @@ from .r import base, complex_heatmap, grid
 def legend_discrete(colors, title: str, **kwargs):
     return complex_heatmap.Legend(
         title=title,
-        at=base.c(*colors.keys()),
-        labels=base.c(*colors.keys()),
+        at=base.names(colors),
+        labels=base.names(colors),
         legend_gp=grid.gpar(
-            fill=r_dict(colors)
+            fill=colors
         ),
         **kwargs
     )
@@ -79,7 +80,7 @@ class guide_legend(Guide):
                 for key in reversed(colors)
             }
         return dict(
-            colors=colors,
+            colors=r_dict(colors),
             title=title if self.title is unset else self.title,
             **self._shared_arguments(),
             **kwargs
@@ -106,6 +107,14 @@ class guide_colourbar(Guide):
 
 
 guide_colorbar = guide_colourbar
+
+
+class GuidesCollection(dict):
+    pass
+
+
+def guides(**kwargs: dict[str, Guide]):
+    return GuidesCollection(**kwargs)
 
 
 GUIDE_REGISTER = {

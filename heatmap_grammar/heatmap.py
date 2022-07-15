@@ -7,11 +7,12 @@ from typing import (
 )
 
 
+from pandas.api.types import is_numeric_dtype
 from pandas import DataFrame, Series
 from rpy2.rinterface import NULL
 
 from .annotations import ColumnAnnotation
-from .constants import unset
+from .constants import unset, required
 from .dendrograms import Dendrogram, RowDendrogram, ColumnDendrogram
 from .plot import Plot, PlotComponent, Theme
 from .rpy2_helpers import py2rpy
@@ -20,7 +21,7 @@ from .r import (
     base,
     grid
 )
-from .scales import Scale, scale_fill_gradient_n
+from .scales import Scale, scale_fill_gradient_n, scale_fill_random
 from .utils import Side, isinstance_permissive
 from .guides import guide_colorbar
 from .unit import Unit
@@ -28,24 +29,34 @@ from .unit import Unit
 
 @dataclass
 class HeatmapTheme(Theme):
-    heatmap_legend_side: Side = 'left'
-    annotation_legend_side: Side = 'left'
+    heatmap_legend_side: Side = 'right'
+    annotation_legend_side: Side = 'right'
     annotation_legend_list: list = field(default_factory=list)
     merge_legend: bool = True
     main_heatmap: str = unset
+    row_km: int = unset
+    column_km: int = unset
 
 
 def vector_or_null(data: Union[None, Iterable]):
     return base.c(*data) if data is not None else NULL
 
 
-def default_heatmap_scales():
-    return {
-        'fill': scale_fill_gradient_n(
-            colors=['blue', 'white', 'red'],
-            guide=guide_colorbar(direction='vertical')
-        )
-    }
+def default_heatmap_scales(dtypes):
+    if len(dtypes) != 1:
+        return {}
+    dtype = dtypes[0]
+    if is_numeric_dtype(dtype):
+        return {
+            'fill': scale_fill_gradient_n(
+                colors=['blue', 'white', 'red'],
+                guide=guide_colorbar(direction='vertical')
+            )
+        }
+    else:
+        return {
+            'fill': scale_fill_random()
+        }
 
 
 def default_dendrograms():
@@ -62,38 +73,56 @@ def new_heatmap_id(i=[0]):
 
 @dataclass
 class Heatmap(PlotComponent):
-    data: DataFrame | Series = None
+    data: DataFrame | Series = required
     weight: Optional[Callable[[DataFrame], Series]] = None
     border: bool | str = False
     top_annotation: 'ColumnAnnotation' | None = None
-    height: Unit | None = None
-    width: Unit | None = None
-    row_gap: Unit | None = Unit(0.5, 'mm')
-    column_gap: Unit | None = Unit(0.5, 'mm')
+    height: Unit = unset
+    width: Unit = unset
+    row_gap: Unit = unset
+    column_gap: Unit = unset
     title: str = ''
     name: str = field(default_factory=new_heatmap_id)
-    cluster_rows: bool = True
-    cluster_columns: bool = True
-    show_row_names: bool = True
-    show_column_names: bool = True
+    cluster_rows: bool = unset
+    cluster_columns: bool = unset
+    show_row_names: bool = unset
+    show_column_names: bool = unset
     clustering_distance_columns: str = "euclidean"
     clustering_method_columns: str = "complete"
     clustering_distance_rows: str = "euclidean"
     clustering_method_rows: str = "complete"
     row_names: Any = grid.gpar(fontsize=8)
     column_title: Any = grid.gpar()
-    column_labels: Iterable | dict | None = None
-    row_labels: Iterable | dict | None = None
-    scales: dict[str, Scale] = field(default_factory=default_heatmap_scales, init=False)
+    column_labels: Iterable | dict = unset
+    column_order: list = unset
+    row_order: list = unset
+    row_labels: Iterable | dict = unset
+    layer_fun: Callable = unset
+    scales: dict[str, Scale] = field(default_factory=dict, init=False)
     dendrograms: dict[str, Dendrogram] = field(default_factory=default_dendrograms, init=False)
     manage_heatmap_legend: bool = True
 
     def __post_init__(self):
-        if self.data is not None:
-            if isinstance(self.data, Series):
-                self.data = self.data.to_frame()
-            self.data = self.data.sort_index(axis=0).sort_index(axis=1)
-            self._check_axes(self.data)
+        assert self.data is not required
+        if isinstance(self.data, Series):
+            self.data = self.data.to_frame()
+
+        dtypes = list(set(self.data.dtypes))
+
+        self.scales = default_heatmap_scales(dtypes)
+
+        order_mapper = {'column_order': 'columns', 'row_order': 'index'}
+        for attr, axis in order_mapper.items():
+            value = getattr(self, attr)
+            if value is not unset:
+                order = Series([*value])
+                if is_numeric_dtype(order):
+                    order = order - 1
+                    column_order = base.c(*getattr(self.data, axis)[order])
+                    setattr(self, attr, base.c(*column_order))
+
+        self.data = self.data.sort_index(axis=0).sort_index(axis=1)
+        self._check_axes(self.data)
 
     @property
     def legends(self):
@@ -130,15 +159,19 @@ class Heatmap(PlotComponent):
         for dendrogram in self.dendrograms.values():
             kwargs.update(dendrogram.params())
 
-        if_not_none_self = [
+        if_not_unset_self = [
             'row_labels', 'column_labels',
             'height', 'width',
             'row_gap', 'column_gap',
+            'column_order', 'row_order',
+            'show_row_names', 'show_column_names',
+            'cluster_rows', 'cluster_columns',
+            'layer_fun'
         ]
 
-        for argument in if_not_none_self:
+        for argument in if_not_unset_self:
             value = getattr(self, argument)
-            if value is not None:
+            if value is not unset:
                 kwargs[argument] = value
 
         for key, value in kwargs.items():
@@ -192,10 +225,6 @@ class Heatmap(PlotComponent):
             name=self.name,
             border=self.border,
             na_col=fill_scale.na_value,
-            cluster_rows=self.cluster_rows,
-            cluster_columns=self.cluster_columns,
-            show_row_names=self.show_row_names,
-            show_column_names=self.show_column_names,
             clustering_distance_columns=self.clustering_distance_columns,
             clustering_method_columns=self.clustering_method_columns,
             clustering_distance_rows=self.clustering_distance_rows,

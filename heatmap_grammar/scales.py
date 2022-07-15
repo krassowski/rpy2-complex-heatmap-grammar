@@ -1,15 +1,17 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Literal, Union, Iterable
 from warnings import warn
 
 from numpy import linspace
 from pandas import Series
+from rpy2.robjects.packages import importr
 
 from .guides import Guide, GuideType, GUIDE_REGISTER
-from .markdown import GridTextData
+from .markdown import MarkdownData
 from .constants import required, unset
 from .r import base, stats, circlize
+from .rpy2_helpers import rpy2py
 from .utils import isinstance_permissive, check_required
 
 
@@ -23,17 +25,17 @@ Aesthetics = Literal['fill', 'color', 'shape']
 class Scale:
     aesthetic: Aesthetics = required
     guide: GuideType = None
-    name: str | GridTextData = unset
+    name: str | MarkdownData = unset
     na_value: str = 'grey50'
     _fitted: bool = field(default=False, init=False)
 
     def __post_init__(self):
         check_required(self)
 
-    def fit(self, data: Series, name: str | GridTextData):
+    def fit(self, data: Series, name: str | MarkdownData):
         if self.name is unset:
             self.name = name
-        assert isinstance(self.name, str) or isinstance_permissive(self.name, GridTextData)
+        assert isinstance(self.name, str) or isinstance_permissive(self.name, MarkdownData)
         self._fitted = True
         self._guide_params = self._prepare_params()
 
@@ -77,7 +79,10 @@ class scale_identity(Scale):
     aesthetic: Aesthetics = 'any'
 
     def compute(self, data: Series):
-        return base.c(*data.apply(str).to_list())
+        return stats.setNames(
+            base.c(*data.apply(str).to_list()),
+            base.c(*data.to_list())
+        )
 
     def _prepare_params(self):
         return {}
@@ -114,9 +119,53 @@ class scale_manual(Scale):
 
 
 @dataclass
+class scale_random(scale_manual):
+    guide: GuideType = 'legend'
+    values: Dict[Any, str] = field(default_factory=dict, init=False)
+    limits: Limits = None
+    luminosity: Literal['bright', 'light', 'dark', 'random'] = 'random'
+    transparency: float = 0
+    hue: str = unset
+
+    def fit(self, data: Series, name: str | MarkdownData):
+        values = data.unique()
+        colors = rpy2py(circlize.rand_color(
+            n=len(values),
+            luminosity=self.luminosity,
+            transparency=float(self.transparency),
+            **(
+                {}
+                if self.hue is unset
+                else {'hue': self.hue}
+            )
+        ))
+        self.values = dict(zip(values, colors))
+        super().fit(data, name)
+
+
+@dataclass
+class scale_brewer(scale_manual):
+    guide: GuideType = 'legend'
+    values: Dict[Any, str] = field(default_factory=dict, init=False)
+    limits: Limits = None
+    palette: str = 'Set1'
+
+    def fit(self, data: Series, name: str | MarkdownData):
+        brewer = importr('RColorBrewer')
+
+        values = data.unique()
+        colors = rpy2py(brewer.brewer_pal(
+            n=len(values),
+            name=self.palette
+        ))
+        self.values = dict(zip(values, colors))
+        super().fit(data, name)
+
+
+@dataclass
 class scale_gradient_n(Scale):
     guide: GuideType = 'colourbar'
-    colors: list[str] = required
+    colors: list[str] | Iterable[str] = required
     space: CirclizeColorspace = 'LAB'
     limits: Limits = None
     # n points deciding where to place provided n colours
@@ -126,6 +175,9 @@ class scale_gradient_n(Scale):
     symmetrical: bool = False
     color_ramp_kwargs: dict = field(default_factory=dict, init=False)
 
+    def __post_init__(self):
+        self.colors = list(self.colors)
+
     def fit_points(self, limits):
         return linspace(
             limits[0],
@@ -133,7 +185,7 @@ class scale_gradient_n(Scale):
             len(self.colors)
         )
 
-    def fit(self, data: Series, name: str | GridTextData):
+    def fit(self, data: Series, name: str | MarkdownData):
         if self.limits is None:
             assert self.quantiles[0] <= self.quantiles[1]
             limits = [
@@ -189,7 +241,10 @@ class scale_gradient_n(Scale):
 
     def compute(self, data: Series):
         self._check_fited()
-        return self._color_function(base.c(*data.to_list()))
+        return stats.setNames(
+            self._color_function(base.c(*data.to_list())),
+            base.c(*data.to_list())
+        )
 
     @property
     def heatmap_col(self):
@@ -283,6 +338,26 @@ class scale_color_manual(scale_manual):
 @dataclass
 class scale_fill_manual(scale_manual):
     aesthetic: Aesthetics = 'fill'
+
+
+@dataclass
+class scale_fill_random(scale_random):
+    aesthetic: Aesthetics = 'fill'
+
+
+@dataclass
+class scale_color_random(scale_random):
+    aesthetic: Aesthetics = 'color'
+
+
+@dataclass
+class scale_fill_brewer(scale_brewer):
+    aesthetic: Aesthetics = 'fill'
+
+
+@dataclass
+class scale_color_brewer(scale_brewer):
+    aesthetic: Aesthetics = 'color'
 
 
 scale_color_continuous = scale_color_gradient

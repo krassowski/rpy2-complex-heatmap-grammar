@@ -5,9 +5,10 @@ from typing import (
     Callable, Literal,
     Optional, Union, List
 )
-
+from warnings import warn
 
 from pandas import DataFrame, Series
+from pandas.api.types import is_numeric_dtype
 
 from .constants import unset
 from .r import (
@@ -15,9 +16,10 @@ from .r import (
     base,
     grid
 )
-from .markdown import GridTextData
+from .markdown import MarkdownData
 from .plot import Plot, PlotComponent
-from .scales import Scale, scale_fill_gradient, scale_identity
+from .scales import Scale, scale_fill_gradient, scale_identity, scale_fill_random
+from .guides import GuidesCollection
 from .unit import Unit
 from .utils import isinstance_permissive
 
@@ -28,21 +30,12 @@ ComplexHeatmapGeom = Literal[
 ]
 
 
-def default_scales():
-    return {
-        'fill': scale_fill_gradient(low='white', high='red'),
-        'color': scale_fill_gradient(low='white', high='red'),
-        'label': scale_identity(),
-        'value': scale_identity()
-    }
-
-
 @dataclass
 class Annotation:
-    geom: Callable | ComplexHeatmapGeom
-    data: DataFrame | None = None
+    geom: Callable | ComplexHeatmapGeom = 'simple'
     mapping: Optional[dict] = None
-    label: Optional[str] = None
+    data: DataFrame | None = None
+    label: str | MarkdownData = None
     height: Unit | None = None
     width: Unit | None = None
     label_rotation: Literal[0, 90, 180, 270] = 0
@@ -51,17 +44,28 @@ class Annotation:
     geom_arguments: dict = field(default_factory=dict)
     gp_arguments: dict = field(default_factory=dict)
     active_scales: list = field(default_factory=list, init=False)
-    scales: dict[str, Scale] = field(default_factory=default_scales, init=False)
+    scales: dict[str, Scale] = field(default_factory=dict, init=False)
+
+    def _default_scale(self, data: Series, aesthetic: str):
+        defaults_by_dtype = {
+            'numeric': scale_fill_gradient(low='white', high='red'),
+            'discrete': scale_fill_random()
+        }
+        if aesthetic in ['fill', 'color']:
+            kind = 'numeric' if is_numeric_dtype(data.dtype) else 'discrete'
+            return defaults_by_dtype[kind]
+
+        return scale_identity()
 
     @property
-    def name(self) -> Union[str, GridTextData]:
-        return self.label or self.mapping['value']
+    def name(self) -> str | MarkdownData:
+        return self.label or self.mapping.get('value', next(iter(self.mapping.values())))
 
     @property
     def name_object(self):
         return (
             self.label.wrapper
-            if isinstance_permissive(self.label, GridTextData) else
+            if isinstance_permissive(self.label, MarkdownData) else
             str(self.name)
         )
 
@@ -71,10 +75,13 @@ class Annotation:
             if isinstance(self.geom, str) else
             self.geom
         )
+        mapping = copy(self.mapping)
+        if 'value' not in mapping and len(mapping) == 1:
+            mapping['value'] = next(iter(mapping.values()))
 
         mapped_dataset = annotation_group.combine(
             data=self.data,
-            mapping=self.mapping
+            mapping=mapping
         )
 
         value = mapped_dataset.extract('value')
@@ -109,11 +116,15 @@ class Annotation:
         self.active_scales = []
 
         for map_key in mapped_dataset.mapping:
-            if map_key == 'value':
+            if map_key == 'value' or map_key == 'split':
                 continue
-            scale = scales[map_key]
-
             values = mapped_dataset.extract(map_key).loc[value.index]
+
+            if map_key in scales:
+                scale = scales[map_key]
+            else:
+                scale = self._default_scale(values, map_key)
+
             scale.fit(values, self.name)
             if scale not in self.active_scales:
                 self.active_scales.append(scale)
@@ -147,6 +158,17 @@ class Annotation:
             **graphical_params,
             **self.geom_arguments,
         )
+
+    def __add__(self, other):
+        result = copy(self)
+        result.scales = copy(result.scales)
+        if isinstance_permissive(other, GuidesCollection):
+            # + guides()
+            for k, v in other.items():
+                result.scales[k].guide = v
+        else:
+            result.scales[other.aesthetic] = other
+        return result
 
 
 @dataclass
@@ -230,7 +252,8 @@ class AnnotationGroup(PlotComponent):
         kwargs = {}
         if self.gap is not None:
             kwargs['gap'] = self.gap.to_r()
-
+        if len(self.layers) == 0:
+            warn('Empty annotation')
         return self.constructor(
             **annotations,
             annotation_name_gp=grid.gpar(fontsize=base.c(*[
@@ -263,6 +286,7 @@ class AnnotationGroup(PlotComponent):
     def __add__(self, annotation: Union[Annotation, List[Annotation]]):
         result = copy(self)
         result.layers = copy(result.layers)
+
         if annotation is None:
             annotations = []
         elif not isinstance(annotation, list):
@@ -271,11 +295,16 @@ class AnnotationGroup(PlotComponent):
             annotations = annotation
 
         for annotation in annotations:
-            if isinstance_permissive(annotation, dict):
+            if (
+                isinstance_permissive(annotation, dict)
+                and not isinstance_permissive(annotation, GuidesCollection)
+            ):
                 result.mapping = copy(result.mapping)
                 if result.mapping is None:
                     result.mapping = {}
                 result.mapping.update(annotation)
+            elif not isinstance_permissive(annotation, Annotation):
+                result.layers[-1] += annotation
             else:
                 result.layers.append(annotation)
         return result
