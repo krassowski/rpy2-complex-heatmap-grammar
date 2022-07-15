@@ -73,7 +73,7 @@ def new_heatmap_id(i=[0]):
 
 @dataclass
 class Heatmap(PlotComponent):
-    data: DataFrame | Series = required
+    data: DataFrame | Series = field(default=required, repr=False)
     weight: Optional[Callable[[DataFrame], Series]] = None
     border: bool | str = False
     top_annotation: 'ColumnAnnotation' | None = None

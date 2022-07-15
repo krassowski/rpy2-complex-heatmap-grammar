@@ -34,7 +34,7 @@ ComplexHeatmapGeom = Literal[
 class Annotation:
     geom: Callable | ComplexHeatmapGeom = 'simple'
     mapping: Optional[dict] = None
-    data: DataFrame | None = None
+    data: DataFrame | None = field(default=None, repr=False)
     label: str | MarkdownData = None
     height: Unit | None = None
     width: Unit | None = None
@@ -186,7 +186,7 @@ class MappedDataset:
 
 @dataclass
 class AnnotationGroup(PlotComponent):
-    data: Optional[DataFrame] = None
+    data: Optional[DataFrame] = field(default=None, repr=False)
     mapping: Optional[dict] = None
     layers: list[Annotation] = field(default_factory=list)
     default_label_side: str = 'abstract'   # TODO
