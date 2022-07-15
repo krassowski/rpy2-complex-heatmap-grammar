@@ -26,7 +26,14 @@ Requirements
 - R >=4.1
   - packages: ComplexHeatmap
 
-Installation from source:
+
+Installation from PyPI:
+
+```
+pip install heatmap-grammar
+```
+
+Latest version:
 
 ```
 pip install git+https://github.com/krassowski/rpy2-complex-heatmap-grammar.git
