@@ -5,7 +5,7 @@ Python heatmap interface using intuitive grammar of graphics, implemented as an 
 
 What this package is:
 - an exploration in search of the dream API for complex heatmap creation
-- trying to get the best of Python, ggplot2 (/[plotnine](https://github.com/has2k1/plotnine)) and ComplexHeatmap
+- trying to get the best of Python, [ggplot2](https://github.com/tidyverse/ggplot2) (/[plotnine](https://github.com/has2k1/plotnine)) and [ComplexHeatmap](https://github.com/jokergoo/ComplexHeatmap)
 - oriented towards data exploration in Jupyter notebooks with IPython (-compatible) kernel
 - pushing boundaries for Python-R interoperability via [rpy2](https://rpy2.github.io/)
 
