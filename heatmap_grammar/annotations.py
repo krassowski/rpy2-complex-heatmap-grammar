@@ -192,6 +192,8 @@ class AnnotationGroup(PlotComponent):
     default_label_side: str = 'abstract'   # TODO
     which: str = 'abstract'
     gap: Unit | None = None
+    height: Unit | None = None
+    width: Unit | None = None
     allow_missing: bool = False
 
     @property
@@ -250,8 +252,10 @@ class AnnotationGroup(PlotComponent):
             for layer in self.layers
         }
         kwargs = {}
-        if self.gap is not None:
-            kwargs['gap'] = self.gap.to_r()
+        for key in ['gap', 'width', 'height']:
+            value = getattr(self, key)
+            if value is not None:
+                kwargs[key] = value.to_r()
         if len(self.layers) == 0:
             warn('Empty annotation')
         return self.constructor(
