@@ -1,13 +1,20 @@
+from __future__ import annotations
 from typing import Callable
 from inspect import signature
 from pandas import DataFrame
 from rpy2.rinterface import rternalize
+import numpy as np
 
-from .rpy2_helpers import py2rpy, rpy2py
+from .rpy2_helpers import py2rpy, rpy2py, rternalize_with_signature
 from .r import base, stats
 
+VectorisedDistanceFunc = Callable[[DataFrame], DataFrame]
+SimpleDistanceFunc = Callable[[np.array, np.array], float]
 
-def clustering_distance(func: Callable[[DataFrame], DataFrame]):
+
+def clustering_distance(
+    func: VectorisedDistanceFunc | SimpleDistanceFunc
+):
     expected_params = [
         param
         for param in signature(func).parameters.values()
@@ -30,12 +37,9 @@ def clustering_distance(func: Callable[[DataFrame], DataFrame]):
             py_distance_df = func(py_data_df)
             return stats.as_dist(py2rpy(py_distance_df))
     else:
-        raise ValueError('Two-parameter functions not currently supported')
-        # TODO: figure out a way for rpy2 to properly
-        # translate signature so that proper dispatch happens in R
         assert len(expected_params) == 2
 
-        @rternalize
+        @rternalize_with_signature
         def wrapper(x, y):
             py_x = rpy2py(x)
             py_y = rpy2py(y)
