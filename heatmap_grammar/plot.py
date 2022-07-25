@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import abstractmethod
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass, field
 from functools import reduce
 from typing import Generic, TypeVar
@@ -50,7 +50,7 @@ class Plot:
         if other is None:
             return self
         result = copy(self)
-        result.theme = copy(result.theme)
+        result.theme = deepcopy(result.theme)
 
         if isinstance_permissive(other, Theme):
             result.theme.update(other.__dict__)
@@ -109,7 +109,7 @@ class Plot:
 
         plot = reduce(_add, component_plots[1:], component_plots[0])
 
-        theme = copy(self.theme)
+        theme = deepcopy(self.theme)
 
         legends = theme['heatmap_legend_list']
         for c in self.components:
