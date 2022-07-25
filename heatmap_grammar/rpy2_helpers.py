@@ -101,7 +101,7 @@ def rternalize_with_signature(function: Callable) -> SexpClosure:
 
     if has_var_params:
         arguments_code += """
-        RPY2_ARGUMENTS <- c(
+        RPY2_ARGUMENTS <- base::c(
             RPY2_ARGUMENTS,
             ...
         )
