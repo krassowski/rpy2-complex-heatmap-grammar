@@ -195,7 +195,7 @@ class scale_gradient_n(Scale):
             if self.symmetrical:
                 if limits[0] > 0 or limits[1] < 0:
                     warn('Symmetrical gradient requested, but interval does not include zero')
-                larger = max(limits)
+                larger = max([abs(lim) for lim in limits])
                 limits = [
                     -larger,
                     larger
