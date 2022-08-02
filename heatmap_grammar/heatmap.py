@@ -23,7 +23,7 @@ from .r import (
 )
 from .scales import Scale, scale_fill_gradient_n, scale_fill_random
 from .utils import Side, isinstance_permissive
-from .guides import guide_colorbar
+from .guides import guide_colorbar, GuidesCollection
 from .unit import Unit
 
 
@@ -274,6 +274,10 @@ class Heatmap(PlotComponent):
         result.scales = copy(result.scales)
         if isinstance_permissive(other, Scale):
             result.scales[other.aesthetic] = other
+        elif isinstance_permissive(other, GuidesCollection):
+            # + guides()
+            for k, v in other.items():
+                result.scales[k].guide = v
         elif isinstance_permissive(other, Dendrogram):
             result.dendrograms[other.axis] = other
         return result
