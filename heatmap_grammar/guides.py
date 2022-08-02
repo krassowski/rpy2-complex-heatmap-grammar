@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from typing import Literal, Union
 from rpy2.rinterface import NULL
 from .constants import unset
+from .markdown import MarkdownData
 from .rpy2_helpers import r_dict
 from .r import base, complex_heatmap, grid
-
+from .utils import isinstance_permissive
 
 def legend_discrete(colors, title: str, **kwargs):
     return complex_heatmap.Legend(
@@ -29,7 +30,7 @@ def legend_colorbar(col_fun, title: str, **kwargs):
 
 @dataclass
 class Guide:
-    title: str = unset
+    title: str | MarkdownData = unset
     label: bool = True
     direction: Literal['horizontal', 'vertical'] = 'vertical'
     border: str = unset
@@ -50,6 +51,14 @@ class Guide:
 
     def legend(self, title: str, colors=None, color_function=None, **kwargs):
         raise NotImplementedError()
+
+    def _title_for_r(self, title: str | MarkdownData):
+        title = title if self.title is unset else self.title
+        return (
+            title.wrapper
+            if isinstance_permissive(title, MarkdownData) else
+            title
+        )
 
 
 GuideType = Union[Literal['colourbar', 'colorbar', 'legend', 'none', None], Guide]
@@ -81,7 +90,7 @@ class guide_legend(Guide):
             }
         return dict(
             colors=r_dict(colors),
-            title=title if self.title is unset else self.title,
+            title=self._title_for_r(title),
             **self._shared_arguments(),
             **kwargs
         )
@@ -97,7 +106,7 @@ class guide_colourbar(Guide):
         assert color_function
         return dict(
             col_fun=color_function,
-            title=title if self.title is unset else self.title,
+            title=self._title_for_r(title),
             **self._shared_arguments(),
             **kwargs
         )
