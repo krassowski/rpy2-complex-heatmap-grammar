@@ -71,6 +71,17 @@ def new_heatmap_id(i=[0]):
     return f'heatmap{i[0]}'
 
 
+class GraphicalParameters:
+    def __init__(self, **kwargs):
+        self.data = kwargs
+
+    def __repr__(self):
+        return f'GraphicalParameters(**{self.data})'
+
+    def to_r(self):
+        return grid.gpar(**self.data)
+
+
 @dataclass
 class Heatmap(PlotComponent):
     data: DataFrame | Series = field(default=required, repr=False)
@@ -91,8 +102,8 @@ class Heatmap(PlotComponent):
     clustering_method_columns: str = "complete"
     clustering_distance_rows: str = "euclidean"
     clustering_method_rows: str = "complete"
-    row_names: Any = grid.gpar(fontsize=8)
-    column_title: Any = grid.gpar()
+    row_names: GraphicalParameters = GraphicalParameters(fontsize=8)
+    column_title: GraphicalParameters = GraphicalParameters()
     column_labels: Iterable | dict = unset
     column_order: list = unset
     row_order: list = unset
@@ -229,8 +240,8 @@ class Heatmap(PlotComponent):
             clustering_method_columns=self.clustering_method_columns,
             clustering_distance_rows=self.clustering_distance_rows,
             clustering_method_rows=self.clustering_method_rows,
-            row_names_gp=self.row_names,
-            column_title_gp=self.column_title,
+            row_names_gp=self.row_names.to_r(),
+            column_title_gp=self.column_title.to_r(),
             show_heatmap_legend=False if self.manage_heatmap_legend else True,
             **kwargs
         )
