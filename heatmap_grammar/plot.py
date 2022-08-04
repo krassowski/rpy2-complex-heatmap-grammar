@@ -132,7 +132,7 @@ class Plot:
                     v
                 )
                 for k, v in theme.items()
-                if v is not unset
+                if v != unset
             }
         )
 
