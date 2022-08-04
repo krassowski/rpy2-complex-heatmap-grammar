@@ -98,8 +98,9 @@ class Annotation:
             self.geom
         )
         mapping = copy(self.mapping)
-        if 'value' not in mapping and len(mapping) == 1:
-            mapping['value'] = next(iter(mapping.values()))
+        mapping_values = set(mapping.values())
+        if 'value' not in mapping and len(mapping_values) == 1:
+            mapping['value'] = next(iter(mapping_values))
 
         mapped_dataset: MappedDataset = annotation_group.combine(
             data=self.data,
@@ -156,12 +157,18 @@ class Annotation:
         for map_key in mapped_dataset.mapping:
             if map_key == 'value' or map_key == 'split':
                 continue
-            if isinstance(value, DataFrame):
-                if mapping[map_key] != mapping['value']:
-                    raise ValueError('Not suported')
-                values = value.columns
-            else:
-                values = mapped_dataset.extract(map_key).loc[value.index]
+            values = mapped_dataset.extract(map_key)
+            if values.index.duplicated().any():
+                if isinstance(value, DataFrame):
+                    if mapping[map_key] != mapping['value']:
+                        raise ValueError('Not yet supported')
+                    values = value.columns
+                else:
+                    values = (
+                        values.groupby(values.index)
+                        .apply(only)
+                        .loc[value.index]
+                    )
 
             if map_key in scales:
                 scale = scales[map_key]
