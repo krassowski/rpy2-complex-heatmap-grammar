@@ -22,6 +22,7 @@ from .scales import Scale, scale_fill_gradient, scale_identity, scale_fill_rando
 from .guides import GuidesCollection
 from .unit import Unit
 from .utils import isinstance_permissive
+from .rpy2_helpers import py2rpy
 
 ComplexHeatmapGeom = Literal[
     'simple',
@@ -29,6 +30,25 @@ ComplexHeatmapGeom = Literal[
     'joyplot', 'horizon', 'text', 'mark', 'zoom'
 ]
 
+
+def only(x):
+    if len(set(x)) != 1:
+        raise ValueError(f'Non-unique values in stat=unique aggregation: {x}')
+    return x[0]
+
+
+def pivot_count(value: Series) -> DataFrame:
+    unique_index = value.index.drop_duplicates()
+    return DataFrame(
+        {
+            category: [
+                sum(value.loc[[index]] == category)
+                for index in unique_index
+            ]
+            for category in sorted(set(value))
+        },
+        index=unique_index
+    )
 
 @dataclass
 class Annotation:
@@ -41,6 +61,8 @@ class Annotation:
     label_rotation: Literal[0, 90, 180, 270] = 0
     label_side: Literal['right', 'left', 'top', 'bottom', 'auto'] = 'auto'
     label_size: float = 5
+    stat: Literal['unique', 'count', 'sum', 'auto'] = 'auto'
+    position: Literal['stack', 'fill', 'identity' 'auto'] = 'auto'
     geom_arguments: dict = field(default_factory=dict)
     gp_arguments: dict = field(default_factory=dict)
     active_scales: list = field(default_factory=list, init=False)
@@ -79,7 +101,7 @@ class Annotation:
         if 'value' not in mapping and len(mapping) == 1:
             mapping['value'] = next(iter(mapping.values()))
 
-        mapped_dataset = annotation_group.combine(
+        mapped_dataset: MappedDataset = annotation_group.combine(
             data=self.data,
             mapping=mapping
         )
@@ -95,6 +117,22 @@ class Annotation:
                 .dropna()
                 ['number']
             )
+
+        stat = self.stat
+        if stat == 'auto':
+            stat = 'unique'
+            if self.geom == 'barplot':
+                stat = 'count'
+
+        if value.index.duplicated().any():
+            if stat == 'count':
+                value = pivot_count(value).loc[mapped_dataset.index]
+            elif stat == 'sum':
+                value = value.groupby(value.index).sum()
+            elif stat == 'unique':
+                value = value.groupby(value.index).apply(only)
+            else:
+                raise ValueError(f'Unknown `stat`={stat}')
 
         gp_mapping = self.gp_arguments.copy()
         gp_mp = {
@@ -118,7 +156,12 @@ class Annotation:
         for map_key in mapped_dataset.mapping:
             if map_key == 'value' or map_key == 'split':
                 continue
-            values = mapped_dataset.extract(map_key).loc[value.index]
+            if isinstance(value, DataFrame):
+                if mapping[map_key] != mapping['value']:
+                    raise ValueError('Not suported')
+                values = value.columns
+            else:
+                values = mapped_dataset.extract(map_key).loc[value.index]
 
             if map_key in scales:
                 scale = scales[map_key]
@@ -151,21 +194,38 @@ class Annotation:
         if annotation_group.which == 'row' and self.width is not None:
             graphical_params['width'] = self.width.to_r()
 
-        return geom(
+        if self.position == 'fill':
+            value = value.div(value.sum(axis=1), axis=0)
+
+        if isinstance(value, DataFrame):
+            r_value = py2rpy(value)
+        else:
             # note: to_list() converts to native type such as float instead of np.float64
-            base.c(*value.to_list()),
+            r_value = base.c(*value.to_list())
+        return geom(
+            r_value,
             which=annotation_group.which,
             **graphical_params,
             **self.geom_arguments,
         )
 
+    def update(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        return self
+
     def __add__(self, other):
         result = copy(self)
         result.scales = copy(result.scales)
+        # note: order matters (GuidesCollection is a dict too)
         if isinstance_permissive(other, GuidesCollection):
-            # + guides()
             for k, v in other.items():
                 result.scales[k].guide = v
+        elif isinstance_permissive(other, dict):
+            result.mapping = {
+                **result.mapping,
+                **other
+            }
         else:
             result.scales[other.aesthetic] = other
         return result
@@ -178,7 +238,7 @@ class MappedDataset:
 
     @property
     def index(self):
-        return self.data.index
+        return self.data.index.drop_duplicates()
 
     def extract(self, variable: str):
         return self.data[self.mapping[variable]]
@@ -186,6 +246,7 @@ class MappedDataset:
 
 @dataclass
 class AnnotationGroup(PlotComponent):
+    _duplicate_index_allowed = True
     data: Optional[DataFrame] = field(default=None, repr=False)
     mapping: Optional[dict] = None
     layers: list[Annotation] = field(default_factory=list)

@@ -184,6 +184,7 @@ PlotType = TypeVar('PlotType', bound=Plot)
 
 
 class PlotComponent(Generic[PlotType]):
+    _duplicate_index_allowed: bool = False
 
     def attach(self, plot: PlotType):
         self.plot = plot
@@ -208,7 +209,10 @@ class PlotComponent(Generic[PlotType]):
         for axis_name in ['index', 'columns']:
             axis = getattr(data, axis_name)
             assert not axis.isna().any()
-            assert len(set(axis)) == len(axis)
+            # duplicate index is allowed for annotations to enable
+            # stacked barplots, but not for the matrix itself
+            if axis_name == 'columns' or not self._duplicate_index_allowed:
+                assert len(set(axis)) == len(axis)
 
 
 @dataclass
