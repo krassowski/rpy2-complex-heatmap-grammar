@@ -50,6 +50,23 @@ def pivot_count(value: Series) -> DataFrame:
         index=unique_index
     )
 
+
+def pivot_identity(value: Series) -> DataFrame:
+    unique_index = value.index.drop_duplicates()
+    n_categories = max(value.index.value_counts())
+    return DataFrame(
+        {
+            category: [
+                # TODO: this has a terrible complexity
+                value.loc[[index]].head(category + 1).tail(1).iloc[0]
+                for index in unique_index
+            ]
+            for category in range(n_categories)
+        },
+        index=unique_index
+    )
+
+
 @dataclass
 class Annotation:
     geom: Callable | ComplexHeatmapGeom = 'simple'
@@ -62,7 +79,7 @@ class Annotation:
     label_side: Literal['right', 'left', 'top', 'bottom', 'auto'] = 'auto'
     label_size: float = 5
     stat: Literal['unique', 'count', 'sum', 'auto'] = 'auto'
-    position: Literal['stack', 'fill', 'identity' 'auto'] = 'auto'
+    position: Literal['stack', 'fill', 'identity', 'dodge', 'auto'] = 'auto'
     geom_arguments: dict = field(default_factory=dict)
     gp_arguments: dict = field(default_factory=dict)
     active_scales: list = field(default_factory=list, init=False)
@@ -124,6 +141,8 @@ class Annotation:
             stat = 'unique'
             if self.geom == 'barplot':
                 stat = 'count'
+            if self.geom == 'boxplot':
+                stat = 'identity'
 
         if value.index.duplicated().any():
             if stat == 'count':
@@ -132,6 +151,9 @@ class Annotation:
                 value = value.groupby(value.index).sum()
             elif stat == 'unique':
                 value = value.groupby(value.index).apply(only)
+            elif stat == 'identity':
+                # TODO: should transpose later?
+                value = pivot_identity(value).loc[mapped_dataset.index].T
             else:
                 raise ValueError(f'Unknown `stat`={stat}')
 
@@ -203,6 +225,9 @@ class Annotation:
 
         if self.position == 'fill':
             value = value.div(value.sum(axis=1), axis=0)
+        elif self.position == 'dodge':
+            graphical_params['beside'] = True
+            graphical_params['attach'] = True
 
         if isinstance(value, DataFrame):
             r_value = py2rpy(value)
