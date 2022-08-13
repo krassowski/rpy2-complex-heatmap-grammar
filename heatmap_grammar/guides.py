@@ -122,7 +122,7 @@ class GuidesCollection(dict):
     pass
 
 
-def guides(**kwargs: dict[str, Guide]):
+def guides(**kwargs: Guide):
     return GuidesCollection(**kwargs)
 
 
