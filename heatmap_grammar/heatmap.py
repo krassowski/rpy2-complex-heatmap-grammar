@@ -5,6 +5,7 @@ from typing import (
     Any, Callable,
     Optional, Union, Iterable
 )
+from warnings import warn
 
 
 from pandas.api.types import is_numeric_dtype
@@ -42,8 +43,10 @@ def vector_or_null(data: Union[None, Iterable]):
     return base.c(*data) if data is not None else NULL
 
 
-def default_heatmap_scales(dtypes):
+def default_heatmap_scales(dtypes: Iterable):
+    dtypes = list(set(dtypes))
     if len(dtypes) != 1:
+        warn(f'More than one data type {dtypes}: cannot resolve default scale')
         return {}
     dtype = dtypes[0]
     if is_numeric_dtype(dtype):
@@ -118,9 +121,8 @@ class Heatmap(PlotComponent):
         if isinstance(self.data, Series):
             self.data = self.data.to_frame()
 
-        dtypes = list(set(self.data.dtypes))
-
-        self.scales = default_heatmap_scales(dtypes)
+        if not self.scales:
+            self.scales = default_heatmap_scales(self.data.dtypes)
 
         order_mapper = {'column_order': 'columns', 'row_order': 'index'}
         for attr, axis in order_mapper.items():
