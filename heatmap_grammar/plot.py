@@ -38,7 +38,8 @@ class Plot:
             if len(first.rows) != len(component.rows):
                 raise ValueError(
                     'Rows number out of agreement between components'
-                    f' {first.rows} and {component.rows}'
+                    f' {first.__class__} with {len(first.rows)} rows and'
+                    f' {component.__class__} with {len(component.rows)} rows'
                 )
             if not all(first.rows == component.rows):
                 raise ValueError(
