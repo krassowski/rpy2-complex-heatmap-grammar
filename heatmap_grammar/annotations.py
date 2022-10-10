@@ -259,7 +259,7 @@ class Annotation:
                 **other
             }
         else:
-            result.scales[other.aesthetic] = other
+            result.scales[other.aesthetic] = copy(other)
         return result
 
 
