@@ -1,4 +1,5 @@
 from __future__ import annotations
+from copy import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Union, Iterable
 from warnings import warn
@@ -53,6 +54,7 @@ class Scale:
         raise NotImplementedError()
 
     def _prepare_params(self) -> dict:
+        """Parameters used for legend (guide) preparation."""
         raise NotImplementedError()
 
     def _check_fited(self):
@@ -97,11 +99,26 @@ class scale_manual(Scale):
     guide: GuideType = 'legend'
     values: Dict[Any, str] = required
     limits: Limits = None
+    labels: Dict[Any, str] = None
 
     def _prepare_params(self):
+        labels = copy(self.labels)
+        if labels:
+            for key in self.labels:
+                if not isinstance(key, str):
+                    if str(key) in labels:
+                        raise ValueError(
+                            f'Passing both a value ({key!r}) and its string'
+                            f' equivalent ({str(key)!r}) is not supported'
+                            ' because R coerces names to characters.'
+                        )
+                    labels[str(key)] = labels[key]
+                if key not in self.values and str(key) not in self.values:
+                    warn(f'Unused label: {key}')
         return dict(
             colors=self.values,
-            title=self.name
+            title=self.name,
+            labels_map=labels
         )
 
     def compute(self, data: Series):
@@ -114,7 +131,8 @@ class scale_manual(Scale):
     @property
     def heatmap_col(self):
         return base.structure(
-            list(self.values.values()), names=list(self.values.keys())
+            list(self.values.values()),
+            names=list(self.values.keys())
         )
 
 

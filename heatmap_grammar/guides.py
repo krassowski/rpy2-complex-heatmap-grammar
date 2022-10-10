@@ -8,11 +8,16 @@ from .rpy2_helpers import r_dict
 from .r import base, complex_heatmap, grid
 from .utils import isinstance_permissive
 
-def legend_discrete(colors, title: str, **kwargs):
+def legend_discrete(colors, title: str, labels_map: dict = None, **kwargs):
+    if not labels_map:
+        labels_map = {}
     return complex_heatmap.Legend(
         title=title,
         at=base.names(colors),
-        labels=base.names(colors),
+        labels=base.c(*[
+            labels_map.get(name, name)
+            for name in base.names(colors)
+        ]),
         legend_gp=grid.gpar(
             fill=colors
         ),
