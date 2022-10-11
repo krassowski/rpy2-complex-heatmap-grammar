@@ -12,6 +12,7 @@ from pandas.api.types import is_numeric_dtype
 from pandas import DataFrame, Series
 from rpy2.rinterface import NULL
 
+from .markdown import MarkdownData
 from .annotations import ColumnAnnotation
 from .constants import unset, required
 from .dendrograms import Dendrogram, RowDendrogram, ColumnDendrogram
@@ -95,7 +96,7 @@ class Heatmap(PlotComponent):
     width: Unit = unset
     row_gap: Unit = unset
     column_gap: Unit = unset
-    title: str = ''
+    title: str | MarkdownData = ''
     name: str = field(default_factory=new_heatmap_id)
     cluster_rows: bool = unset
     cluster_columns: bool = unset
@@ -273,7 +274,11 @@ class Heatmap(PlotComponent):
         return self.heatmap(
             plot,
             molecule_abundance,
-            column_title=self.title,
+            column_title=(
+                self.title.wrapper
+                if isinstance_permissive(self.title, MarkdownData) else
+                str(self.title)
+            ),
             row_title=NULL,
             heatmap_legend_param=base.list(**fill_scale.params)
         )
