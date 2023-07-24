@@ -3,7 +3,8 @@ from copy import copy
 from dataclasses import dataclass, field
 from typing import (
     Any, Callable,
-    Optional, Union, Iterable
+    Optional, Union, Iterable,
+    Literal
 )
 from warnings import warn
 
@@ -29,6 +30,8 @@ from .guides import guide_colorbar, GuidesCollection
 from .unit import Unit
 
 
+LegendAlignment = Literal['heatmap_center', 'heatmap_top', 'global_center']
+
 @dataclass
 class HeatmapTheme(Theme):
     heatmap_legend_side: Side = 'right'
@@ -38,6 +41,10 @@ class HeatmapTheme(Theme):
     main_heatmap: str = unset
     row_km: int = unset
     column_km: int = unset
+    align_heatmap_legend: LegendAlignment = unset
+    align_annotation_legend: LegendAlignment = unset
+    legend_grouping: Literal['adjusted', 'original'] = unset
+    gap: Unit = unset
 
 
 def vector_or_null(data: Union[None, Iterable]):
