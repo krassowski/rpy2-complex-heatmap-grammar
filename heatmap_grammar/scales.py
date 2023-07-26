@@ -115,11 +115,13 @@ class scale_manual(Scale):
                     labels[str(key)] = labels[key]
                 if key not in self.values and str(key) not in self.values:
                     warn(f'Unused label: {key}')
-        return dict(
+        result = dict(
             colors=self.values,
-            title=self.name,
-            labels_map=labels
+            title=self.name
         )
+        if labels:
+            result['labels_map'] = labels
+        return result
 
     def compute(self, data: Series):
         self._check_fited()
