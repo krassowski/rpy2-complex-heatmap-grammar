@@ -11,7 +11,7 @@ from warnings import warn
 
 from pandas.api.types import is_numeric_dtype
 from pandas import DataFrame, Series
-from rpy2.rinterface import NULL
+from rpy2.rinterface import NULL, rternalize
 
 from .markdown import MarkdownData
 from .annotations import ColumnAnnotation
@@ -31,6 +31,24 @@ from .unit import Unit
 
 
 LegendAlignment = Literal['heatmap_center', 'heatmap_top', 'global_center']
+
+
+def cell_overlay(function):
+    @rternalize
+    def callback(j, i, x, y, width, height, fill):
+        function(
+          # move to 0-based positioning
+          j[0] - 1,
+          i[0] - 1,
+          x[0],
+          y[0],
+          width[0],
+          height[0],
+          fill[0]
+        )
+        return 1
+    return callback
+
 
 @dataclass
 class HeatmapTheme(Theme):
@@ -114,6 +132,7 @@ class Heatmap(PlotComponent):
     clustering_distance_rows: str = "euclidean"
     clustering_method_rows: str = "complete"
     row_names: GraphicalParameters = GraphicalParameters(fontsize=8)
+    column_names: GraphicalParameters = GraphicalParameters(fontsize=8)
     column_title: GraphicalParameters = GraphicalParameters()
     column_labels: Iterable | dict = unset
     column_order: list = unset
@@ -123,6 +142,8 @@ class Heatmap(PlotComponent):
     scales: dict[str, Scale] = field(default_factory=dict, init=False)
     dendrograms: dict[str, Dendrogram] = field(default_factory=default_dendrograms, init=False)
     manage_heatmap_legend: bool = True
+    column_names_rot: int = unset
+    cell_fun: Callable = unset
 
     def __post_init__(self):
         assert self.data is not required
@@ -187,7 +208,8 @@ class Heatmap(PlotComponent):
             'column_order', 'row_order',
             'show_row_names', 'show_column_names',
             'cluster_rows', 'cluster_columns',
-            'layer_fun'
+            'layer_fun', 'column_names_rot',
+            'cell_fun'
         ]
 
         for argument in if_not_unset_self:
@@ -251,6 +273,7 @@ class Heatmap(PlotComponent):
             clustering_distance_rows=self.clustering_distance_rows,
             clustering_method_rows=self.clustering_method_rows,
             row_names_gp=self.row_names.to_r(),
+            column_names_gp=self.column_names.to_r(),
             column_title_gp=self.column_title.to_r(),
             show_heatmap_legend=False if self.manage_heatmap_legend else True,
             **kwargs

@@ -1,7 +1,7 @@
 from .annotations import Annotation, ColumnAnnotation, RowAnnotation
 from .dendrograms import ColumnDendrogram, RowDendrogram
 from .clustering import clustering_distance, inverse_abs_correlation
-from .heatmap import Heatmap, HeatmapTheme
+from .heatmap import cell_overlay, Heatmap, HeatmapTheme
 from .guides import guide_colorbar, guide_colourbar, guide_legend, guides
 from .markdown import markdown
 from .plot import Plot, labs
@@ -38,6 +38,7 @@ __all__ = [
     'ColumnAnnotation',
     'RowAnnotation',
     'aes',
+    'cell_overlay',
     'clustering_distance',
     'inverse_abs_correlation',
     'guide_colorbar',
